@@ -1,0 +1,176 @@
+#This input performs 21-step equilibration as reported in doi/10.1021/ma200345v
+#General Settings
+clear
+units		        real
+boundary             p p p
+atom_style	        full
+pair_style        lj/cut/coul/long 14.0
+pair_modify 	    shift no mix arithmetic tail yes
+kspace_style      ewald 1.0e-4
+bond_style      	harmonic
+angle_style    	harmonic
+dihedral_style 	harmonic
+special_bonds     amber
+improper_style cvff
+read_data hu1-Br.data
+neighbor	       2.0 bin
+neigh_modify       every 1 delay 4 check yes page 1000000 one 10000
+thermo 10000
+thermo_style custom step atoms temp press vol ebond emol evdwl etail edihed eangle cpu density cpuremain
+
+
+#pre-run optimization
+minimize 1.0e-4 1.0e-6 100 1000
+timestep 0.1
+fix 2 all npt temp 308.0 308.0  100 iso 1 1 1000
+run 500000
+unfix 2
+timestep 1
+
+fix 2 all npt temp 308.0 308.0  100 iso 1 1 1000
+run 1000000
+unfix 2
+
+#run 21-step equilibration 30 times
+variable i loop 30
+label loo
+
+#----------------------------------Step 1-2 ----------------
+
+fix 1 all nvt temp 1500.0 1500.0 100
+run 50000
+unfix 1
+
+
+
+fix 1 all nvt temp 308.0 308.0  100
+run 50000
+unfix 1
+
+
+#----------------------------------Step 3----------------
+
+fix 2 all npt temp 308.0 308.0  100 iso 1000 1000 1000
+run 100000
+unfix 2
+
+
+#----------------------------------Step 4-5----------------
+
+fix 1 all nvt temp 1500.0 1500.0  100
+run 50000
+unfix 1
+
+
+fix 1 all nvt temp 308.0 308.0  100
+run 100000
+unfix 1
+
+
+#----------------------------------Step 6----------------
+
+fix 2 all npt temp 308.0 308.0  100 iso 30000 30000 1000
+run 100000
+unfix 2
+
+
+
+#----------------------------------Step 7-8----------------
+
+fix 1 all nvt temp 1500.0 1500.0 100
+run 50000
+unfix 1
+
+
+fix 1 all nvt temp 308.0 308.0 100
+run 100000
+unfix 1
+
+
+#----------------------------------Step 9----------------
+
+fix 2 all npt temp 308.0 308.0  100 iso 50000 50000 1000
+run 100000
+unfix 2
+
+
+
+#----------------------------------Step 10-11----------------
+
+fix 1 all nvt temp 1500.0 1500.0 100
+run 50000
+unfix 1
+
+
+fix 1 all nvt temp 308.0 308.0  100
+run 100000
+unfix 1
+
+
+
+
+#----------------------------------Step 12----------------
+
+fix 2 all npt temp 308.0 308.0  100 iso 25000 25000 1000
+run 10000
+unfix 2
+
+
+#----------------------------------Step 13-14----------------
+
+fix 1 all nvt temp 1500.0 1500.0 100
+run 5000
+unfix 1
+
+
+fix 1 all nvt temp 308.0 308.0  100
+run 10000
+unfix 1
+
+
+#----------------------------------Step 15----------------
+
+fix 2 all npt temp 308.0 308.0  100 iso 5000 5000 1000
+run 10000
+unfix 2
+
+
+
+#----------------------------------Step 16-17----------------
+
+fix 1 all nvt temp 1500.0 1500.0 100
+run 5000
+unfix 1
+
+
+fix 1 all nvt temp 308.0 308.0  100
+run 10000
+unfix 1
+
+
+#----------------------------------Step 18----------------
+
+fix 2 all npt temp 308.0 308.0  100 iso 500 500 1000
+run 10000
+unfix 2
+
+
+#----------------------------------Step 19-20----------------
+
+fix 1 all nvt temp 1500.0 1500.0 100
+run 5000
+unfix 1
+
+
+fix 1 all nvt temp 308.0 308.0  100
+run 10000
+unfix 1
+
+#----------------------------------Step 21----------------
+
+fix 2 all npt temp 298.0 298.0 100 iso 1.0 1.0 1000
+run 500000
+unfix 2
+write_data PTTB-${i}.data #
+next i
+jump SELF loo

@@ -1,0 +1,128 @@
+# This input puts water around a PA layer to swell/activate it with water
+# General Settings
+lear
+units		        real
+boundary p p f
+atom_style	        full
+pair_style        lj/cut/coul/long 12
+bond_style      	harmonic
+angle_style    	harmonic
+dihedral_style 	harmonic
+special_bonds     amber
+improper_style cvff
+pair_modify tail yes mix arithmetic
+kspace_style      ewald 1.0e-4
+kspace_modify slab nozforce
+processors * * 1
+
+#Set general variables
+variable name index MPDTMC-25t-90xl
+variable lb equal -20 #leftermost border of the system
+variable rb equal 83 #rightermost border of the system
+variable lp equal 15#where polymer starts
+variable rp equal 45#where polymer ends
+variable pushPatm equal 100#push pressure in atm unit
+
+#Dependent variables
+variable lg equal ${lb}+10 #where to put first graphene on z direction
+variable rg equal ${rb}-10 #where to put first graphene on z direction
+variable lw equal ${lg}+5 #where to start water for left part
+variable rw equal ${rg}-10 #where to start water for right part
+variable waterleftamount equal round(0.0334*(lx*ly*(${lp}-${lg})))
+variable waterrightamount equal round(0.0334*(lx*ly*(${rg}-${rp})))
+variable pushP equal ${pushPatm}*lx*lx*0.001/69.5/445 #push pressure in lammps per atom unit
+variable pushPneg equal -${pushPatm}*lx*lx*0.001/69.5/445 #push pressure in lammps per atom unit
+
+#set the system
+read_data ${name}-eq.data extra/atom/types 4 extra/bond/types 2 extra/angle/types 2 extra/dihedral/types 1 extra/improper/types 1
+
+variable a equal 8  # number of atom types of pure structure
+variable a1 equal 1+$a
+variable a2 equal 2+$a
+variable a3 equal 3+$a
+variable a4 equal 4+$a
+
+variable b equal 9  # number of bond types of pure structure
+variable b1 equal 1+$b
+variable b2 equal 2+$b
+
+variable e equal 14  # number of angle types of pure structure
+variable e1 equal 1+$e
+variable e2 equal 2+$e
+
+mass ${a1} 1.01   #H-h2o
+pair_coeff ${a1} ${a1} 1E-10 1
+
+mass ${a2} 16   #O- h2O
+pair_coeff ${a2} ${a2} 0.1553 3.166
+
+#Bonded H2O
+bond_coeff ${b1}  450 0.9572
+angle_coeff ${e1} 55 104.52
+pair_coeff ${a1} ${a2} 1E-10 1
+molecule H2O H2O.txt offset ${a} ${b} ${e} 0 0
+
+#Defining regions and groups 
+region leftwater block EDGE EDGE EDGE EDGE ${lw} ${lp}
+region rightwater block EDGE EDGE EDGE EDGE ${rp} ${rw}
+region midwater block EDGE EDGE EDGE EDGE ${lp} ${rp}
+group H2O type ${a1} ${a2}
+
+#adding grephene sheets as walls
+read_data graphene.data add append offset ${a2} ${b1} ${e1} 18 7 shift 0 0 ${lg} group piston1
+read_data graphene.data add append offset ${a3} ${b1} ${e1} 18 7 shift 0 0 ${rg} group piston2
+thermo 10000
+thermo_style custom step atoms temp press vol ebond emol evdwl etail edihed eangle cpu lx ly lz density cpuremain
+timestep 0.5
+
+
+#add water to both sides of polymer
+fix    addwaterleft H2O deposit ${waterleftamount} 0 1 512312 region leftwater mol H2O near 1.5
+fix    addwaterright H2O deposit ${waterrightamount} 0 1 512312 region rightwater mol H2O near 1.5
+run 40000
+unfix addwaterleft
+unfix addwaterright
+
+#set groups
+label typing
+variable i loop ${a}
+group polymer type ${i}
+next i
+jump SELF typing
+group bothpistons union piston1 piston2
+group integ subtract all bothpistons
+
+thermo 10000
+
+#Run setup
+fix fpists bothpistons setforce 0.0 0.0 0.0
+fix zwalls all wall/reflect zlo EDGE zhi EDGE
+fix 2nv all nve
+fix tp integ langevin 300 300 100 5172 tally yes
+timestep 0.01
+run 10000
+unfix fpists
+dump             force1  piston1 custom 10000 wall1.forces id type x y z fx fy fz
+dump             force2  piston2 custom 10000 wall2.forces id type x y z fx fy fz
+compute 2 bothpistons chunk/atom bin/1d z lower 1
+compute 3 polymer chunk/atom bin/1d z lower 5
+compute 4 H2O chunk/atom bin/1d z lower 5
+
+compute 20z all chunk/atom bin/1d z lower 20	
+fix 2 piston1 ave/chunk 1000 5 10000 2 density/mass file zifz.txt
+fix 3 polymer ave/chunk 1000 5 10000 3 density/mass file zifzp.txt
+fix 4 H2O ave/chunk 1000 5 10000 4 density/mass file zifzw.txt
+fix pistonskeep bothpistons setforce 0.0 0.0 NULL
+fix piston1push piston1 aveforce NULL NULL ${pushP}
+fix piston2push piston2 aveforce NULL NULL ${pushPneg}
+
+
+timestep 1.0
+run 5000000
+
+unfix piston1push 
+unfix piston2push 
+
+run 2500000
+
+write_data ${name}-activated.data

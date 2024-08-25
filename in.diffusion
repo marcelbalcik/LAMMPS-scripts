@@ -1,0 +1,117 @@
+# This input takes a structure with already sorbed gases and runs a diffusion simulation. 
+# General Settings
+clear
+units		        real
+boundary             p p p
+atom_style	        full
+pair_style       lj/cut/coul/long 14.0
+pair_modify 	    tail yes
+kspace_style      ewald 1.0e-004
+special_bonds     amber
+bond_style      	harmonic
+angle_style    	harmonic
+dihedral_style 	harmonic
+improper_style 	cvff
+
+read_data 30.2 # data file
+
+#Setting gas parameters
+variable a equal 7 # number of atom types of pure structure
+variable a1 equal 1+$a
+variable a2 equal 2+$a
+variable a3 equal 3+$a
+variable a4 equal 4+$a
+variable a5 equal 5+$a
+variable a6 equal 6+$a
+variable a7 equal 7+$a
+variable a8 equal 8+$a
+variable a9 equal 9+$a
+variable a10 equal 10+$a
+
+variable b equal 8 # number of bond types of pure structure
+variable b1 equal 1+$b
+variable b2 equal 2+$b
+variable b3 equal 3+$b
+variable b4 equal 4+$b
+
+variable e equal 15 # number of angle types of pure structure
+variable e1 equal 1+$e
+variable e2 equal 2+$e
+variable e3 equal 3+$e
+variable e4 equal 4+$e
+
+mass ${a1} 12.01   #C-CO2
+pair_coeff ${a1} ${a1} 0.05362 2.8
+
+mass ${a2} 15.99   #O-CO2
+pair_coeff ${a2} ${a2} 0.156988 3.05
+
+mass ${a3} 14.01   #N-N2
+pair_coeff ${a3} ${a3} 0.0715 3.31
+
+mass ${a4} 0.001   #M-N2
+pair_coeff ${a4} ${a4} 0.005 0.001
+
+mass ${a5} 16   #O-O2
+pair_coeff ${a5} ${a5} 0.0974 3.02
+
+mass ${a6} 0.001    #M-O2
+pair_coeff ${a6} ${a6} 0.005 0.001
+mass ${a7} 2.02    #M-H2
+mass ${a8} 12    #CH4-C
+mass ${a9} 1    #CH4-H
+mass ${a10} 4    #He
+
+pair_coeff ${a7} ${a7} 0.072871313 2.958#H2
+pair_coeff ${a8} ${a8} 0.065975 3.5 #CH4 - C
+pair_coeff ${a9} ${a9} 0.03 2.5 #CH4 - H
+
+pair_coeff ${a10} ${a10} 0.0199 2.6#He
+#Bonded-CO2
+bond_coeff ${b1} 937.96 1.16
+angle_coeff ${e1} 56 180
+
+#Bonded N2
+bond_coeff ${b2} 937.96 0.55
+angle_coeff ${e2} 3000 180
+
+#Bonded O2
+bond_coeff ${b3} 937.96 0.605
+angle_coeff ${e3} 3000 180
+
+#Bonded CH4
+bond_coeff ${b4} 937.96 1.09
+angle_coeff ${e4} 300 109.5
+
+#more settigns
+pair_modify mix arithmetic
+thermo_style custom step atoms temp press vol ebond eangle edihed press ecoul emol evdwl etail density cpu cpuremain
+neighbor	       2.0 bin
+neigh_modify       every 1 delay 0 check yes page 1000000 one 10000
+thermo 1000
+timestep 1
+#doing setup for the diffusion run
+timestep 1
+reset_ids
+write_data reset-id.data
+
+velocity all create 308.0 ${v} mom yes
+fix    5 all npt temp 308 308 100 iso 10 10 1000
+run 100000
+unfix 5
+reset_timestep 0
+
+timestep 4.0 #This input uses 4 fs as timestep
+run_style respa 3 2 2 bond 1 angle 1 dihedral 2 pair 2 kspace 3
+
+group cm type ${a1} #COM of co2
+group chm type ${a8} #COM of ch4
+compute pos all position
+fix orde all ordern diffusivity 1000 100000 c_pos nb 10 nbe 20 title "diffusion"
+dump          traj  all custom 10000 PTTB-20bar.lammpstrj id type x y z ix iy iz
+dump_modify traj sort id
+fix    5 all nvt temp 308 308 100
+run 50000000 # In total it will be a 200 ns simulation
+
+
+
